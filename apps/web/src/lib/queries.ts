@@ -270,10 +270,36 @@ export function useDeleteJob() {
 
 export function useRunJob() {
   const qc = useQueryClient();
-  return useMutation<Job, ApiError, string>({
+  return useMutation<Job, ApiError, string, { previousJob?: Job }>({
     mutationFn: (id) => runJob(id),
+    // Optimistically flip the cached job (detail + list) to "running" the moment
+    // the run is triggered. Without this the badge stays "Pending" for the whole
+    // ~14s run on the click path — the "running" visual only appeared after a
+    // manual reload. Flipping the cache also engages the status-gated poll in
+    // useJob/useJobs so the detail page tracks the run live until it settles.
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: qk.job(id) });
+      const previousJob = qc.getQueryData<Job>(qk.job(id));
+      if (previousJob) {
+        qc.setQueryData<Job>(qk.job(id), { ...previousJob, status: "running" });
+      }
+      qc.setQueryData<JobSummary[]>(qk.jobs(), (list) =>
+        list?.map((j) => (j.id === id ? { ...j, status: "running" } : j)),
+      );
+      return { previousJob };
+    },
+    onError: (_err, id, context) => {
+      // Roll back the optimistic "running"; onSettled's refetch then reconciles
+      // the true terminal state (usually "failed") from the server.
+      if (context?.previousJob) {
+        qc.setQueryData(qk.job(id), context.previousJob);
+      }
+    },
     onSuccess: (job) => {
-      qc.invalidateQueries({ queryKey: qk.job(job.id) });
+      qc.setQueryData(qk.job(job.id), job);
+    },
+    onSettled: (_job, _err, id) => {
+      qc.invalidateQueries({ queryKey: qk.job(id) });
       qc.invalidateQueries({ queryKey: qk.jobs() });
       qc.invalidateQueries({ queryKey: qk.jobStats() });
     },

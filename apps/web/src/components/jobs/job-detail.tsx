@@ -1,12 +1,14 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Play, Pencil, Trash2 } from "lucide-react";
+import { Play, Pencil, Trash2, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -20,8 +22,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { StatusBadge } from "./status-badge";
+import { SegmentationProgress } from "./segmentation-progress";
 import { MaskOverlayViewer } from "./mask-overlay-viewer";
 import { useDeleteJob, useRunJob } from "@/lib/queries";
+import { pendingAutoRun } from "@/lib/pending-autorun";
 import { volumeSliceUrl } from "@/lib/api-client";
 import type { Job } from "@nnunet-3d-medical-image-segmentation/shared";
 
@@ -34,11 +38,65 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+/**
+ * Server-rendered input mid-slice. The PNG is generated on demand and can take a
+ * few seconds to paint, so hold a Skeleton over it until `onLoad` fires — the
+ * same loading affordance the mask viewer uses — so it never reads as a broken
+ * black box on first paint.
+ */
+function InputPreview({ volumeKey }: { volumeKey: string }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <div className="space-y-2">
+      <div className="relative aspect-square w-full max-w-md overflow-hidden rounded-lg border border-border bg-black/90">
+        {!loaded && (
+          <Skeleton className="absolute inset-0 h-full w-full rounded-none" />
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={volumeSliceUrl(volumeKey)}
+          alt="Input volume mid-slice"
+          onLoad={() => setLoaded(true)}
+          className="h-full w-full object-contain"
+        />
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Mid-slice of the input volume. Run the segmentation to produce a mask
+        overlay.
+      </p>
+    </div>
+  );
+}
+
 export function JobDetail({ job }: { job: Job }) {
   const router = useRouter();
   const runJob = useRunJob();
   const deleteJob = useDeleteJob();
   const running = runJob.isPending || job.status === "running";
+
+  const runSegmentation = useCallback(
+    () =>
+      runJob
+        .mutateAsync(job.id)
+        .then(() => toast.success("Segmentation complete"))
+        .catch((e) =>
+          toast.error("Run failed", {
+            description: e instanceof Error ? e.message : "Unknown error",
+          })
+        ),
+    [runJob, job.id]
+  );
+
+  // "Create & run" hands this job off from the New-job form; run it once on
+  // arrival so the user reaches inference in a single action. Owning the run
+  // here (not in the unmounted form) means its running state, poll, and
+  // reconcile behave exactly like the manual Run button below.
+  useEffect(() => {
+    if (pendingAutoRun.has(job.id) && job.status === "pending") {
+      pendingAutoRun.delete(job.id);
+      void runSegmentation();
+    }
+  }, [job.id, job.status, runSegmentation]);
 
   return (
     <div className="space-y-6">
@@ -48,20 +106,12 @@ export function JobDetail({ job }: { job: Job }) {
           <StatusBadge status={job.status} />
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            disabled={running}
-            onClick={() =>
-              runJob
-                .mutateAsync(job.id)
-                .then(() => toast.success("Segmentation complete"))
-                .catch((e) =>
-                  toast.error("Run failed", {
-                    description: e instanceof Error ? e.message : "Unknown error",
-                  })
-                )
-            }
-          >
-            <Play className="mr-1.5 h-4 w-4" />
+          <Button disabled={running} onClick={() => void runSegmentation()}>
+            {running ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Play className="mr-1.5 h-4 w-4" />
+            )}
             {running ? "Running..." : job.status === "completed" ? "Re-run" : "Run segmentation"}
           </Button>
           <Button asChild variant="outline">
@@ -109,6 +159,12 @@ export function JobDetail({ job }: { job: Job }) {
           </AlertDialog>
         </div>
       </div>
+
+      {/* While the run is in flight, show an honest staged-progress estimate —
+          real nnU-Net stage labels + a determinate bar. Mounted on the same
+          `running` condition as the spinner/badge, so it appears exactly during
+          the run and resets on completion, re-run, or navigation. */}
+      {running && <SegmentationProgress />}
 
       {job.status === "failed" && job.error && (
         <Alert variant="destructive">
@@ -185,20 +241,7 @@ export function JobDetail({ job }: { job: Job }) {
             {job.status === "completed" && job.overlay_slice_keys.length > 0 ? (
               <MaskOverlayViewer jobId={job.id} count={job.overlay_slice_keys.length} />
             ) : (
-              <div className="space-y-2">
-                <div className="overflow-hidden rounded-lg border border-border bg-black/90">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={volumeSliceUrl(job.input_volume_key)}
-                    alt="Input volume mid-slice"
-                    className="aspect-square w-full max-w-md object-contain"
-                  />
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Mid-slice of the input volume. Run the segmentation to produce a
-                  mask overlay.
-                </p>
-              </div>
+              <InputPreview volumeKey={job.input_volume_key} />
             )}
           </CardContent>
         </Card>

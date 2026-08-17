@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useCreateJob, useVolumes } from "@/lib/queries";
+import { pendingAutoRun } from "@/lib/pending-autorun";
 import {
   MODALITIES,
   SEGMENTATION_MODELS,
@@ -66,7 +67,9 @@ export function JobCreateForm() {
     },
   });
 
-  const onSubmit = async (values: Values) => {
+  // `run` auto-chains create → run so a first-time user reaches inference in one
+  // action. Inputs stay immutable: we still create the job, then trigger its run.
+  const onSubmit = async (values: Values, run: boolean) => {
     try {
       const job = await createJob.mutateAsync({
         name: values.name,
@@ -81,9 +84,18 @@ export function JobCreateForm() {
           .map((t) => t.trim())
           .filter(Boolean),
       });
-      toast.success("Job created", {
-        description: "Open it and click Run segmentation to start nnU-Net.",
-      });
+      if (run) {
+        // Hand the run off to the detail page (see lib/pending-autorun.ts): it
+        // triggers the run on mount so the page lands already in the running
+        // state, and the run's optimistic state + poll + reconcile are owned by
+        // that still-mounted page — exactly like the in-place Run button.
+        pendingAutoRun.add(job.id);
+        toast.success("Job created — starting nnU-Net");
+      } else {
+        toast.success("Job created", {
+          description: "Open it and click Run segmentation to start nnU-Net.",
+        });
+      }
       router.push(`/jobs/${job.id}`);
     } catch (e) {
       toast.error("Could not create job", {
@@ -93,10 +105,14 @@ export function JobCreateForm() {
   };
 
   const noVolumes = !volumes.isLoading && (volumes.data?.length ?? 0) === 0;
+  const submitting = createJob.isPending;
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="max-w-2xl space-y-6">
+      <form
+        onSubmit={form.handleSubmit((v) => onSubmit(v, true))}
+        className="max-w-2xl space-y-6"
+      >
         {noVolumes && (
           <Alert>
             <AlertDescription>
@@ -285,8 +301,18 @@ export function JobCreateForm() {
           <Button type="button" variant="outline" onClick={() => router.push("/jobs")}>
             Cancel
           </Button>
-          <Button type="submit" disabled={createJob.isPending || noVolumes}>
-            {createJob.isPending ? "Creating..." : "Create job"}
+          {/* Plain create path preserved; the primary action auto-runs so a
+              first-time user reaches inference in one click. */}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={submitting || noVolumes}
+            onClick={form.handleSubmit((v) => onSubmit(v, false))}
+          >
+            Create job
+          </Button>
+          <Button type="submit" disabled={submitting || noVolumes}>
+            {submitting ? "Creating..." : "Create & run"}
           </Button>
         </div>
       </form>

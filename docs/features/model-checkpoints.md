@@ -26,11 +26,12 @@ without retraining.
 ## Flow
 - Seed generates synthetic labeled volumes and writes the nnU-Net raw dataset
 - `train_demo_model()` runs fingerprint → plan → preprocess → short train
-- The results dir is tarred and uploaded to `checkpoints/`
+- The results dir is tarred and uploaded to `checkpoints/`; the preprocessed tensors go to `preprocessed/`
+- Seed archives those local artifacts to B2 on **every** run (idempotent), whether it just trained or reused an existing local checkpoint — so `checkpoints/`/`preprocessed/` are never left empty when training is skipped
 - At inference, if the local checkpoint is absent, the tarball is pulled from B2 and extracted before predicting
 
 ## Edge Cases
-- Checkpoint already present (local or B2) → seed skips training (idempotent) unless `--force`
+- Checkpoint already present (local or B2) → seed skips *training* (idempotent) unless `--force`, but still (re)uploads the local checkpoint + preprocessed tensors to B2 when they are missing there (or always, under `--force`)
 - torch ≥ 2.6 breaks nnU-Net 2.5.x's PolyLRScheduler → torch is pinned `<2.6` in requirements
 - nnU-Net env dirs (`nnUNet_raw`/`nnUNet_preprocessed`/`nnUNet_results`) live under gitignored `.data/`
 

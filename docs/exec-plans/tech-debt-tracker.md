@@ -75,3 +75,11 @@ Low-severity polish, left for a follow-up; none blocks the core flow.
 | Custom `FileNotFoundError` shadowed the built-in | Renamed to `FileNotFoundServiceError` |
 | Dropzone accepted any file type client-side | `accept` allow-list mirroring backend `ALLOWED_TYPES` (tested for drift) |
 | No test harness for feature specs | pytest suite across upload, files, activity, errors, validation, rate limit, pagination |
+
+## 2026-08-17 — verify (UX nitpicks)
+
+Non-blocking nitpicks surfaced by `/sample-3-verify` (segmentation marquee). Backlog only — not looped.
+
+- Dashboard vs Segmentations — the same entity is labeled inconsistently ("Segmentations" sidebar, "New segmentation" dashboard CTA, "New job" jobs page, "Jobs" breadcrumb) → a newcomer could briefly wonder whether they lead to the same place; discoverability itself is fine (`.local/verify/A/01-dashboard.png`).
+- Job detail at completion — for one render the primary action button still shows a disabled "Running…" while the badge already reads "Completed" and the overlay/toast have rendered → transient optimistic-update reconcile lag; self-heals on the next render / fresh load (`.local/verify/A/r2-06-completed.png`).
+- Volumes grid (`/volumes`) — below-the-fold volume thumbnails lazy-load as solid black squares (`bg-black/90`, `loading="lazy"`) with no skeleton until scrolled into view; the job-detail input preview, by contrast, has a Skeleton → cosmetic on a non-marquee surface (`.local/verify/B/r2-10-volumes-during-op.png`).

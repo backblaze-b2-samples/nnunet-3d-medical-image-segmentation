@@ -16,9 +16,10 @@ User journeys inside the application.
 ## Run a Segmentation Job
 
 - User navigates to `/jobs` → "New job"
-- Picks an ingested volume (Select), a modality (CT/MRI/Other), and a model; optionally sets site/patient/tags/notes. The job is created with status `pending`
-- On the job detail page (`/jobs/[id]`), the input volume's mid-slice preview renders; clicking **Run segmentation** executes **real nnU-Net inference** on the auto-detected device (default CPU)
-- While running, the status badge polls; on completion the mask-overlay slice viewer and metrics (device, foreground voxels, per-label mL) appear, and the mask lands under `masks/<id>/` on B2
+- Picks an ingested volume (Select), a modality (CT/MRI/Other), and a model; optionally sets site/patient/tags/notes
+- **Create & run** (the primary action) creates the job and immediately starts its run, landing on the detail page already in the running state — inference in one click. A plain **Create job** button still creates it as `pending` for the user to run later
+- On the job detail page (`/jobs/[id]`), the input volume's mid-slice preview renders (behind a Skeleton until it paints); clicking **Run segmentation** executes **real nnU-Net inference** on the auto-detected device (default CPU)
+- The click path enters the "Running" state immediately (optimistic pulsing badge + spinning button), not just after a reload; the status badge then polls until the job settles. During the run a staged-progress panel shows the real nnU-Net pipeline stages (resolve checkpoint → preprocess → inference → render mask & overlays) with a determinate bar — an honest elapsed-time estimate (no server-streamed progress), capped below 100% until the job settles. On completion the mask-overlay slice viewer and metrics (device, foreground voxels, per-label mL) appear, and the mask lands under `masks/<id>/` on B2
 - **Edit** changes metadata only (name/tags/notes) — the input volume/model are immutable; to change them, create a new job
 - **Delete** removes the job record and its scoped `masks/<id>/` artifacts; the input volume is untouched
 - **Re-run** is allowed and overwrites the job's mask

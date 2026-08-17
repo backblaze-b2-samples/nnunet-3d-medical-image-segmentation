@@ -8,6 +8,14 @@ out/
 dist/
 build/
 
+# Next.js 16 `next dev` auto-generates per-app agent instruction files in the web
+# app dir on every boot (apps/web/AGENTS.md + its CLAUDE.md shim, pointing at
+# node_modules internals). They duplicate the single-source root AGENTS.md map, so
+# keep them out of the tree — `next dev` recreates them locally as needed.
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
+apps/web/GEMINI.md
+
 # Python
 __pycache__/
 *.py[cod]

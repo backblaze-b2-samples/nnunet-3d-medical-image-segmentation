@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { toast } from "sonner";
-import { Play } from "lucide-react";
+import { Play, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -36,8 +36,12 @@ function RunButton({ job }: { job: JobSummary }) {
           )
       }
     >
-      <Play className="mr-1 h-3.5 w-3.5" />
-      {job.status === "completed" ? "Re-run" : "Run"}
+      {busy ? (
+        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+      ) : (
+        <Play className="mr-1 h-3.5 w-3.5" />
+      )}
+      {busy ? "Running" : job.status === "completed" ? "Re-run" : "Run"}
     </Button>
   );
 }

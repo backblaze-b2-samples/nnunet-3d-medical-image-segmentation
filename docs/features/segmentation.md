@@ -7,7 +7,7 @@ segmentation mask to Backblaze B2. This is the sample's primary, headline
 feature — never mocked.
 
 ## Used By
-- UI: `/jobs/[id]` (Run segmentation), `/jobs` row Run button
+- UI: `/jobs/[id]` (Run segmentation), `/jobs` row Run button, and the New-job form's primary **Create & run** action (auto-chains create → run so a first-time user reaches inference in one click; a plain **Create job** button is still offered)
 - API: `POST /jobs/{job_id}/run`
 - Job: synchronous inference in a threadpool (no separate worker)
 
@@ -46,8 +46,8 @@ feature — never mocked.
 - Re-run allowed → overwrites the job's mask
 
 ## UX States
-- Pending: input mid-slice preview, "Run segmentation" button
-- Running: polling badge, disabled controls
+- Pending: input mid-slice preview (held behind a Skeleton until the PNG paints, so it never flashes a black box), "Run segmentation" button
+- Running: entered **immediately** on the click path via an optimistic cache flip (`useRunJob.onMutate`) — pulsing "Running" badge + spinning button, controls disabled — and kept live by the status-gated poll in `useJob`/`useJobs` until the job settles (no reload needed). A staged-progress panel (`components/jobs/segmentation-progress.tsx`) is mounted on that same `running` condition: it shows the real nnU-Net pipeline stage labels (resolve checkpoint → preprocess → inference → render mask & overlays) with a determinate progress bar. Because a segmentation is one synchronous request with no server-streamed progress, the bar is an honest elapsed-time **estimate** (`lib/segmentation-progress.ts`) — paced to `SEGMENTATION_ESTIMATE_MS` and capped at `SEGMENTATION_PROGRESS_CAP` (below 100%) until the job reaches its terminal state; it resets on completion, re-run, and navigation
 - Completed: mask-overlay slice viewer + metrics
 - Failed: destructive alert with the error
 

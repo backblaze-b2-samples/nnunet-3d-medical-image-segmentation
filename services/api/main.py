@@ -3,20 +3,12 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from pathlib import Path
 
-from dotenv import load_dotenv
+from app.env_bootstrap import REPO_ROOT_ENV, load_repo_root_env
 
-# Single source of truth: repo-root .env. Anchored to this file's path so it
-# resolves correctly regardless of where uvicorn is invoked from (local
-# `cd services/api && uvicorn`, Docker WORKDIR, etc.). A deployment that ships
-# only this service has no repo root above it — there the file simply does not
-# exist and configuration comes from real environment variables, so anchor on
-# this service's root and let load_dotenv be the no-op it already is.
-_API_ROOT = Path(__file__).resolve().parent
-_REPO_ROOT = _API_ROOT.parents[1] if len(_API_ROOT.parents) > 1 else _API_ROOT
-REPO_ROOT_ENV = _REPO_ROOT / ".env"
-load_dotenv(REPO_ROOT_ENV)
+# Load the single source of truth — the anchored repo-root .env — before
+# app.config reads settings, resolved from any CWD (see app/env_bootstrap.py).
+load_repo_root_env()
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402

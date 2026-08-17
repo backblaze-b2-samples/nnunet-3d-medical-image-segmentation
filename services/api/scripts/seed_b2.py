@@ -31,6 +31,10 @@ API_ROOT = Path(__file__).resolve().parents[1]
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
+from app.env_bootstrap import load_repo_root_env  # noqa: E402
+
+load_repo_root_env()  # repo-root .env before app.config reads settings
+
 from app.config import settings  # noqa: E402
 from app.repo import get_object_bytes, put_bytes  # noqa: E402
 from app.service import synthetic, training  # noqa: E402
@@ -166,10 +170,17 @@ def main() -> int:
     else:
         logger.info("Training a real short nnU-Net model...")
         training.train_demo_model(force=args.force)
-        _upload_checkpoint()
-        _upload_preprocessed()
 
+    # Always archive the local artifacts to B2 (idempotently), whether we just
+    # trained or reused an existing local checkpoint. Skipping this on the reuse
+    # path is what left checkpoints/ and preprocessed/ empty on B2 (the shared
+    # dev bucket also purges objects after 7 days, so a prior upload can expire).
     if checkpoint_path().exists():
+        if args.force or not _checkpoint_on_b2():
+            _upload_checkpoint()
+        else:
+            logger.info("Checkpoint already archived on B2: %s", checkpoint_object_key())
+        _upload_preprocessed()
         _seed_example_masks(rows)
     _upload_manifest(rows)
 

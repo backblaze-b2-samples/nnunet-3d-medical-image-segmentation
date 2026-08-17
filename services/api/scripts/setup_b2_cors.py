@@ -32,6 +32,10 @@ from botocore.exceptions import ClientError
 API_ROOT = Path(__file__).resolve().parents[1]
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
+from app.env_bootstrap import load_repo_root_env  # noqa: E402
+
+load_repo_root_env()  # repo-root .env before app.config reads settings
+
 from app.config import settings  # noqa: E402
 
 RULE_ID = "nnunet-direct-upload"
