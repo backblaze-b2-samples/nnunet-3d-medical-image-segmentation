@@ -36,7 +36,7 @@ Reliability expectations and practices for this project.
 
 The download counter and the `/metrics` counters are **in-process, per replica**. Consequences to plan for before scaling:
 
-- **Download counter** (`app/repo/counter.py`) persists to a JSON file at `DOWNLOAD_COUNT_FILE` (default `.data/download_count.json`, resolved from the repo root — deliberately outside `services/api/`, which `uvicorn --reload` watches, so a download never writes into the dev reloader's watch tree). On an ephemeral filesystem (Railway without a mounted volume or Vercel Functions) it **resets to 0 on every redeploy**. With multiple replicas or Function instances each keeps its own file/count. For durable, shared counts: mount a persistent volume or swap the adapter for Redis/DB.
+- **Download counter** (`app/repo/counter.py`) persists to a JSON file at `DOWNLOAD_COUNT_FILE` (default `.data/download_count.json`, resolved from the repo root — deliberately outside `services/api/`, which `uvicorn --reload` watches, so a download never writes into the dev reloader's watch tree). On an ephemeral filesystem (e.g. Railway without a mounted volume) it **resets to 0 on every redeploy**. With multiple replicas each keeps its own file/count. For durable, shared counts: mount a persistent volume or swap the adapter for Redis/DB.
 - **`/metrics` counters** live in process memory and reset on restart. Behind a load balancer, each replica reports only its own slice — scrape with an instance label and aggregate, or push to a shared collector.
 
 ## Rate Limiting
@@ -57,12 +57,13 @@ The download counter and the `/metrics` counters are **in-process, per replica**
 - The API contracts check `/health`; it confirms process readiness, but the
   response is still HTTP 200 when B2 is degraded. Promotion therefore also
   requires `b2_connected: true` and an affected-flow smoke test.
-- Railway uses a persistent service model; Vercel runs the API as a Function.
-  On Vercel, set `WARM_LIST_CACHE_ON_STARTUP=false` to avoid a cold-start bucket
-  scan. Uploads go directly from the browser to B2 (presigned PUT), so they no
-  longer pass through the Function and Vercel's 4.5 MB payload ceiling does not
-  apply — `MAX_FILE_SIZE` can stay at the 100 MB default. The bucket must allow
-  the deploy origin in its CORS (see infra/vercel/README.md).
+- The nnU-Net API is **not** Vercel-serverless-deployable (torch + `nnunetv2`
+  exceed the Function size/RAM limits); run it on Railway, a GPU box, or locally.
+  Only the Next.js web tier deploys to Vercel. On a scale-to-zero host, set
+  `WARM_LIST_CACHE_ON_STARTUP=false` to avoid a cold-start bucket scan. Uploads
+  go directly from the browser to B2 (presigned PUT), so they never pass through
+  the API — `MAX_FILE_SIZE` (default 512 MB) is the only cap. The bucket must
+  allow the web deploy origin in its CORS (see infra/vercel/README.md).
 - See [infra/railway/README.md](../infra/railway/README.md) or
   [infra/vercel/README.md](../infra/vercel/README.md) for the selected
   platform's versioned configuration, approval, rollback, and cleanup procedure.
