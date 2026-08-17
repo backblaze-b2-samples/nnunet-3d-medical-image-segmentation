@@ -11,7 +11,7 @@ from app.service.upload import _validate_declared
 
 def test_key_uses_original_filename():
     key = _validate_declared("report.txt", "text/plain", 5)
-    assert key == "uploads/report.txt"
+    assert key == "volumes/report.txt"
 
 
 def test_duplicate_filename_yields_same_key():
@@ -19,9 +19,9 @@ def test_duplicate_filename_yields_same_key():
     # versioning keeps both. Minting is deterministic, so the keys match.
     first = _validate_declared("report.txt", "text/plain", 5)
     second = _validate_declared("report.txt", "text/plain", 9)
-    assert first == second == "uploads/report.txt"
+    assert first == second == "volumes/report.txt"
 
 
 def test_key_is_sanitised():
     key = _validate_declared("../../etc/my report.txt", "text/plain", 5)
-    assert key == "uploads/my_report.txt"
+    assert key == "volumes/my_report.txt"

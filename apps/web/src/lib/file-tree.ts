@@ -1,4 +1,4 @@
-import type { FileMetadata } from "@vibe-coding-starter-kit/shared";
+import type { FileMetadata } from "@nnunet-3d-medical-image-segmentation/shared";
 
 export interface TreeFolder {
   type: "folder";

@@ -46,6 +46,12 @@ ALLOWED_TYPES = {
     # Additional video containers (mp4 already above).
     "video/quicktime",
     "video/webm",
+    # 3D imaging volumes for nnU-Net ingest: NIfTI (.nii / .nii.gz) and DICOM
+    # series (.dcm, or zipped — application/zip already above). Gzip and
+    # octet-stream carry the NIfTI/DICOM bytes the browser can't type precisely.
+    "application/gzip",
+    "application/x-gzip",
+    "application/octet-stream",
 }
 
 _DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -77,6 +83,10 @@ MIME_EXTENSION_MAP: dict[str, set[str]] = {
     _PPTX: {"pptx"},
     "video/quicktime": {"mov"},
     "video/webm": {"webm"},
+    # NIfTI / DICOM volume ingest. `.nii.gz` splits to the `gz` extension.
+    "application/gzip": {"gz"},
+    "application/x-gzip": {"gz"},
+    "application/octet-stream": {"nii", "dcm"},
 }
 
 # Magic-byte signatures for the binary types we accept. The client-declared
@@ -161,9 +171,10 @@ class UploadError(Exception):
         super().__init__(detail)
 
 
-# Every object the app writes lives under this prefix; the API mints the key so
-# the client never chooses where its bytes land.
-UPLOAD_PREFIX = "uploads/"
+# Browser-ingested volumes land under this prefix; the API mints the key so the
+# client never chooses where its bytes land. The seed writes a richer
+# volumes/<site>/<modality>/<patient>/ hierarchy under the same prefix.
+UPLOAD_PREFIX = "volumes/"
 # Leading bytes fetched for the post-upload sniff. The deepest signature check
 # reads data[8:12]; 512 leaves generous headroom for any future signature.
 _SNIFF_BYTES = 512
@@ -237,7 +248,7 @@ def verify_upload(key: str) -> FileUploadResponse:
     Enabling quarantine→promote (see the design plan) closes that window.
     """
     if not key.startswith(UPLOAD_PREFIX):
-        raise UploadError("Upload key must be under the uploads/ prefix")
+        raise UploadError("Upload key must be under the volumes/ prefix")
     try:
         validate_key(key)
     except FileKeyError as e:

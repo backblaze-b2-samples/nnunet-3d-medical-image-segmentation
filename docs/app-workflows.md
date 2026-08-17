@@ -3,18 +3,26 @@
 
 User journeys inside the application.
 
-## Upload Files
+## Ingest a Volume
 
-- User navigates to `/upload`
-- Drops or selects files in the dropzone
-- Client validates file size (max 100MB) and type
-- Files upload **directly from the browser to B2** (a presigned PUT). A determinate progress bar tracks the bytes leaving the browser; once they are all sent the row switches to "Verifying upload..." with an *indeterminate* sweeping bar while the API HEADs and magic-byte-sniffs the stored object. That phase has no percentage to report, and a bar parked at a full 100% read as finished-but-stuck
-- On success: toast notification, green checkmark, and a "View in Files" link through to the browser
-- On failure: red status icon with error message
-- User can clear completed uploads
-- The queue lives in an app-wide provider: navigating to another page keeps the upload running, shows an "Uploading N files" indicator in the header, and keeps the duplicate-upload guard armed
-- Reloading or closing mid-upload asks for confirmation first; if the upload dies anyway, the next load says which file didn't finish
-- See: [File Upload](features/file-upload.md)
+- User navigates to `/upload` ("Ingest volume", linked from the Volumes page)
+- Drops or selects a NIfTI (`.nii` / `.nii.gz`) or zipped DICOM series (max 512MB)
+- Files upload **directly from the browser to B2** under `volumes/` (a presigned PUT). A determinate progress bar tracks the bytes; then the row switches to "Verifying upload..." while the API HEADs the stored object
+- On success: toast + the volume appears on the Volumes page and in the create-job selector
+- On failure: red status icon with error message (offline, CORS on a deployed origin, or type/size)
+- Alternatively, `pnpm run seed` populates a synthetic cohort under `volumes/` with no browser step
+- See: [Volume ingest](features/volume-ingest.md)
+
+## Run a Segmentation Job
+
+- User navigates to `/jobs` → "New job"
+- Picks an ingested volume (Select), a modality (CT/MRI/Other), and a model; optionally sets site/patient/tags/notes. The job is created with status `pending`
+- On the job detail page (`/jobs/[id]`), the input volume's mid-slice preview renders; clicking **Run segmentation** executes **real nnU-Net inference** on the auto-detected device (default CPU)
+- While running, the status badge polls; on completion the mask-overlay slice viewer and metrics (device, foreground voxels, per-label mL) appear, and the mask lands under `masks/<id>/` on B2
+- **Edit** changes metadata only (name/tags/notes) — the input volume/model are immutable; to change them, create a new job
+- **Delete** removes the job record and its scoped `masks/<id>/` artifacts; the input volume is untouched
+- **Re-run** is allowed and overwrites the job's mask
+- See: [Segmentation](features/segmentation.md)
 
 ## Browse and Manage Files
 
@@ -34,12 +42,11 @@ User journeys inside the application.
 ## View Dashboard
 
 - User navigates to `/` (home)
-- Three parallel API calls load: stats, recent files, upload activity — all served from one shared bucket listing that the API warms at startup
-- While stats load, the page states it in words above the cards rather than showing silent skeletons
-- Stats cards show: total files, storage used, uploads today, total downloads
-- Upload chart shows last 7 days of upload activity as bar chart
-- Recent uploads table shows last 10 files with filename, size, type, date. Each filename links to that file's preview on `/files` — `/files` teaches "click a file to preview it", so the same gesture here has to answer rather than being inert text
-- Empty state: "No files uploaded yet" messages
+- `useJobStats()` and `useJobs()` load the cohort aggregates and recent jobs
+- Stat cards show: volumes, masks, jobs completed, and the model size on B2
+- A "Storage by artifact type" card breaks down raw / preprocessed / masks / checkpoints bytes — the write-amplification story
+- A recent-segmentations table lists the newest jobs with a Run action; a running job makes the table poll until it settles
+- Empty state: "No segmentation jobs yet" pointing at `pnpm run seed` / New job
 - See: [Dashboard](features/dashboard.md)
 
 ## Change Preferences

@@ -8,19 +8,32 @@ import {
 } from "@tanstack/react-query";
 import {
   ApiError,
+  createJob,
   deleteFile,
+  deleteJob,
   getDownloadUrl,
   getFileDetail,
   getFiles,
   getFileStats,
   getHealth,
+  getJob,
+  getJobs,
+  getJobSliceUrl,
+  getJobStats,
   getPreviewUrl,
   getUploadActivity,
+  getVolumes,
+  runJob,
+  updateJob,
 } from "@/lib/api-client";
 import type {
   FileMetadata,
   FileMetadataDetail,
-} from "@vibe-coding-starter-kit/shared";
+  Job,
+  JobStats,
+  JobSummary,
+  VolumeSummary,
+} from "@nnunet-3d-medical-image-segmentation/shared";
 
 // Single source of truth for query keys. Keep these tightly scoped so that
 // invalidating "files" doesn't blow away unrelated caches, and so an IDE
@@ -35,6 +48,10 @@ export const qk = {
   preview: (key: string) => [...qk.all, "preview", key] as const,
   detail: (key: string) => [...qk.all, "detail", key] as const,
   health: () => [...qk.all, "health"] as const,
+  jobs: () => [...qk.all, "jobs"] as const,
+  job: (id: string) => [...qk.all, "job", id] as const,
+  jobStats: () => [...qk.all, "jobs", "stats"] as const,
+  volumes: () => [...qk.all, "volumes"] as const,
 };
 
 export type Health = Awaited<ReturnType<typeof getHealth>>;
@@ -167,5 +184,108 @@ export function useDeleteFile() {
       dropDeletedFileFromCache(qc, fileKey);
       qc.invalidateQueries({ queryKey: qk.all });
     },
+  });
+}
+
+// --- Segmentation Jobs -----------------------------------------------------
+
+export function useJobs({ enabled = true }: QueryGate = {}) {
+  return useQuery<JobSummary[], ApiError>({
+    queryKey: qk.jobs(),
+    queryFn: getJobs,
+    enabled,
+    // Poll while any job is running so status/preview refresh without a reload.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((j) => j.status === "running") ? 2500 : false,
+  });
+}
+
+export function useJob(id: string | undefined, { enabled = true }: QueryGate = {}) {
+  return useQuery<Job, ApiError>({
+    queryKey: qk.job(id ?? ""),
+    queryFn: () => getJob(id as string),
+    enabled: enabled && !!id,
+    refetchInterval: (query) =>
+      query.state.data?.status === "running" ? 2500 : false,
+  });
+}
+
+export function useJobStats({ enabled = true }: QueryGate = {}) {
+  return useQuery<JobStats, ApiError>({
+    queryKey: qk.jobStats(),
+    queryFn: getJobStats,
+    enabled,
+  });
+}
+
+export function useJobSliceUrl(
+  id: string,
+  index: number,
+  enabled: boolean
+) {
+  return useQuery<{ url: string }, ApiError>({
+    queryKey: [...qk.job(id), "slice", index],
+    queryFn: () => getJobSliceUrl(id, index),
+    enabled,
+  });
+}
+
+export function useCreateJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createJob,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.jobs() });
+      qc.invalidateQueries({ queryKey: qk.jobStats() });
+    },
+  });
+}
+
+export function useUpdateJob() {
+  const qc = useQueryClient();
+  return useMutation<
+    Job,
+    ApiError,
+    { id: string; name?: string; notes?: string | null; tags?: string[] }
+  >({
+    mutationFn: ({ id, ...body }) => updateJob(id, body),
+    onSuccess: (job) => {
+      qc.invalidateQueries({ queryKey: qk.job(job.id) });
+      qc.invalidateQueries({ queryKey: qk.jobs() });
+    },
+  });
+}
+
+export function useDeleteJob() {
+  const qc = useQueryClient();
+  return useMutation<{ deleted: boolean; id: string }, ApiError, string>({
+    mutationFn: (id) => deleteJob(id),
+    onSuccess: (_res, id) => {
+      qc.removeQueries({ queryKey: qk.job(id) });
+      qc.invalidateQueries({ queryKey: qk.jobs() });
+      qc.invalidateQueries({ queryKey: qk.jobStats() });
+    },
+  });
+}
+
+export function useRunJob() {
+  const qc = useQueryClient();
+  return useMutation<Job, ApiError, string>({
+    mutationFn: (id) => runJob(id),
+    onSuccess: (job) => {
+      qc.invalidateQueries({ queryKey: qk.job(job.id) });
+      qc.invalidateQueries({ queryKey: qk.jobs() });
+      qc.invalidateQueries({ queryKey: qk.jobStats() });
+    },
+  });
+}
+
+// --- Volumes ---------------------------------------------------------------
+
+export function useVolumes({ enabled = true }: QueryGate = {}) {
+  return useQuery<VolumeSummary[], ApiError>({
+    queryKey: qk.volumes(),
+    queryFn: getVolumes,
+    enabled,
   });
 }

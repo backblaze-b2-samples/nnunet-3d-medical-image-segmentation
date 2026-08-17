@@ -7,7 +7,7 @@ import type { NextConfig } from "next";
 // One wildcard covers every region + bucket, so this config drops in
 // without per-deployment tweaks.
 const nextConfig: NextConfig = {
-  transpilePackages: ["@vibe-coding-starter-kit/shared"],
+  transpilePackages: ["@nnunet-3d-medical-image-segmentation/shared"],
   images: {
     remotePatterns: [
       {

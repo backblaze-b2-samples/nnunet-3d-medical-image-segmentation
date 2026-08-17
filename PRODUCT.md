@@ -6,20 +6,21 @@ product
 
 ## Users
 
-AI coding agents and "vibe coders" (developers who lean on AI to move fast) who clone
-this kit as the foundation for a new full-stack app. Their context: they want to skip
-the boilerplate loop (dashboard, upload, file browser, cloud storage wiring) and go
-straight to building their app's unique features. They read the repo, keep the shared
-scaffolding, and rebrand + rewrite the dashboard for their own use case.
+ML/imaging engineers and research-IT teams evaluating Backblaze B2 as the storage
+backbone for a 3D medical-image segmentation pipeline, plus AI coding agents scaffolding
+one. Their context: they want to see, end to end and with real models, how a
+write-amplifying nnU-Net pipeline (ingest → preprocess → train → segment → serve) uses
+B2 as its single store over the S3-compatible API — at a tiny, screenshot-fast scale
+they can run locally with no GPU and no second API key.
 
 ## Product Purpose
 
-An engineering-grade full-stack starter kit (Next.js 16 + React 19 + Tailwind v4 +
-shadcn/ui frontend, FastAPI backend) with Backblaze B2 cloud storage integrated out of
-the box. It ships a dashboard, drag-and-drop upload, and a file browser so builders
-start from a working app, not a blank page. Success = a builder can clone it, run it,
-rebrand it via one config file, and trust every screen enough to build on top without
-first fixing it.
+A B2-backed dashboard for automated 3D CT/MRI segmentation with nnU-Net (Next.js 16 +
+FastAPI). It ingests NIfTI/DICOM volumes, runs **real** `nnunetv2` inference locally,
+and archives every artifact — raw volumes, preprocessed tensors, segmentation masks, and
+the trained checkpoint itself — on Backblaze B2. Success = a builder can clone it, add
+their B2 credentials, run `pnpm run seed` to mint a real model + demo cohort, and get a
+correct segmentation mask with a mid-slice overlay, with B2 as the only store.
 
 ## Maturity and Support Boundary
 

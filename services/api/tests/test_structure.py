@@ -82,6 +82,26 @@ def test_boto3_only_in_repo():
     assert violations == [], "boto3 boundary violations:\n" + "\n".join(violations)
 
 
+def test_nnunet_engine_contained_in_service():
+    """torch / nnunetv2 stay inside app/service/ (repo/ is the boto3-only surface).
+
+    Mirrors `test_boto3_only_in_repo`: the heavy ML engine is confined to the
+    service layer, so no route handler, repo adapter, config, or type module can
+    reach for it directly. Enforced across the whole app tree except service/.
+    """
+    engine_roots = ("torch", "nnunetv2", "batchgenerators")
+    violations = []
+    for pyfile in _get_python_files(APP_ROOT):
+        if "service" in pyfile.relative_to(APP_ROOT).parts:
+            continue
+        for imp in _get_imports(pyfile):
+            root = imp.split(".", 1)[0]
+            if root in engine_roots:
+                rel = pyfile.relative_to(APP_ROOT.parent)
+                violations.append(f"{rel}: '{imp}' imported outside service/")
+    assert violations == [], "nnU-Net engine boundary violations:\n" + "\n".join(violations)
+
+
 def test_api_app_python_file_size_limit():
     """Verify authored Python under services/api/app stays within 300 lines."""
     violations = []

@@ -2,7 +2,13 @@
 # Feature: File Browser
 
 ## Purpose
-List, preview, download, and delete files stored in Backblaze B2.
+List, preview, download, and delete **every** object stored in the B2 bucket
+across all prefixes (`volumes/`, `preprocessed/`, `masks/`, `checkpoints/`,
+`jobs/`, `manifests/`). This full-bucket explorer is a non-negotiable keep from
+the starter; it sits **alongside** the sample-scoped
+[Volumes](volume-ingest.md) view (which shows only ingested volumes with
+server-rendered thumbnails). Dual explorers: browse-everything here, work with
+the domain there.
 
 ## Used By
 - UI: `/files` page, file browser component

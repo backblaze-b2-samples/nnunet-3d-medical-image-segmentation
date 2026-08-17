@@ -12,6 +12,25 @@ boto3>=1.35.0
 Pillow>=11.0.0
 PyPDF2>=3.0.0
 
+# --- nnU-Net 3D segmentation engine (local ML; imported lazily at runtime) ---
+# Upper bounds are load-bearing: unbounded ML pins boot green but break the
+# marquee segmentation on a clean install. Keep in sync with requirements.lock,
+# regenerated in a FRESH venv after any edit here.
+nnunetv2>=2.5.0,<2.6.0
+# CPU/MPS wheel on macOS arm64 — do NOT pin a CUDA build. nnU-Net picks the
+# device at runtime (app/service/device.py); default CPU.
+# Upper bound <2.6 is load-bearing: nnU-Net 2.5.x's PolyLRScheduler passes the
+# `verbose` positional that torch removed in 2.6, so training crashes on torch
+# >=2.6. Keep torch and nnunetv2 in this window together.
+torch>=2.4.0,<2.6.0
+nibabel>=5.2.0,<6.0.0
+pydicom>=2.4.0,<4.0.0
+SimpleITK>=2.3.0,<3.0.0
+scipy>=1.13.0,<2.0.0
+# Many medical-imaging libs still assume numpy<2; nnU-Net + torch resolve
+# cleanly against 1.26.x on the 3.12 baseline.
+numpy>=1.26.0,<2.0.0
+
 # Dev / quality
 ruff>=0.8.0
 pytest>=8.0.0

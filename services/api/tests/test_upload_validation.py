@@ -24,7 +24,7 @@ def _meta(key: str, *, size_bytes: int, content_type: str) -> FileMetadata:
     return FileMetadata(
         key=key,
         filename=filename,
-        folder="uploads/",
+        folder="volumes/",
         size_bytes=size_bytes,
         size_human=f"{size_bytes} B",
         content_type=content_type,
@@ -187,7 +187,7 @@ def test_presign_returns_signed_put(monkeypatch):
     monkeypatch.setattr(upload_service, "generate_presigned_upload", fake_sign)
     result = create_presigned_upload("My Photo.png", "image/png", 1234)
 
-    assert result.key == "uploads/My_Photo.png"
+    assert result.key == "volumes/My_Photo.png"
     assert result.url == "https://b2.example/signed-put"
     assert result.headers["Content-Type"] == "image/png"
     # The exact size + type are signed in, so B2 enforces them.
@@ -229,7 +229,7 @@ def test_presign_returns_signed_put(monkeypatch):
 )
 def test_presign_accepts_new_filetypes(filename, content_type):
     """Each newly allowed type clears the allow-list + extension checks."""
-    assert _validate_declared(filename, content_type, 16) == f"uploads/{filename}"
+    assert _validate_declared(filename, content_type, 16) == f"volumes/{filename}"
 
 
 # --- post-upload verification (HEAD + Range-GET sniff) -----------------------
@@ -256,42 +256,42 @@ def _wire_verify(monkeypatch, *, metadata, head_bytes):
 
 
 def test_verify_accepts_valid_object(monkeypatch):
-    meta = _meta("uploads/a.png", size_bytes=16, content_type="image/png")
+    meta = _meta("volumes/a.png", size_bytes=16, content_type="image/png")
     deleted, invalidated = _wire_verify(
         monkeypatch, metadata=meta, head_bytes=_PNG_HEAD
     )
-    result = verify_upload("uploads/a.png")
-    assert result.key == "uploads/a.png"
+    result = verify_upload("volumes/a.png")
+    assert result.key == "volumes/a.png"
     assert result.metadata is None  # rich extraction stays on-demand
     assert deleted == []
     assert invalidated == [True]  # new object made visible
 
 
 def test_verify_rejects_and_deletes_signature_mismatch(monkeypatch):
-    meta = _meta("uploads/a.png", size_bytes=16, content_type="image/png")
+    meta = _meta("volumes/a.png", size_bytes=16, content_type="image/png")
     deleted, _ = _wire_verify(
         monkeypatch, metadata=meta, head_bytes=b"<html>not a png"
     )
     with pytest.raises(UploadError) as exc:
-        verify_upload("uploads/a.png")
+        verify_upload("volumes/a.png")
     assert exc.value.status_code == 415
-    assert deleted == ["uploads/a.png"]  # invalid object removed
+    assert deleted == ["volumes/a.png"]  # invalid object removed
 
 
 def test_verify_rejects_oversize(monkeypatch):
     monkeypatch.setattr(upload_service.settings, "max_file_size", 10)
-    meta = _meta("uploads/big.txt", size_bytes=999, content_type="text/plain")
+    meta = _meta("volumes/big.txt", size_bytes=999, content_type="text/plain")
     deleted, _ = _wire_verify(monkeypatch, metadata=meta, head_bytes=b"x")
     with pytest.raises(UploadError) as exc:
-        verify_upload("uploads/big.txt")
+        verify_upload("volumes/big.txt")
     assert exc.value.status_code == 413
-    assert deleted == ["uploads/big.txt"]
+    assert deleted == ["volumes/big.txt"]
 
 
 def test_verify_missing_object_is_404(monkeypatch):
     deleted, _ = _wire_verify(monkeypatch, metadata=None, head_bytes=b"")
     with pytest.raises(UploadError) as exc:
-        verify_upload("uploads/gone.txt")
+        verify_upload("volumes/gone.txt")
     assert exc.value.status_code == 404
     assert deleted == []  # nothing to delete
 
@@ -303,7 +303,7 @@ def test_verify_rejects_key_outside_uploads_prefix():
 
 def test_verify_skips_range_get_for_signatureless_type(monkeypatch):
     """Text/data types have no signature, so verify must not fetch header bytes."""
-    meta = _meta("uploads/notes.md", size_bytes=12, content_type="text/markdown")
+    meta = _meta("volumes/notes.md", size_bytes=12, content_type="text/markdown")
     fetched: list[int] = []
     monkeypatch.setattr(upload_service, "get_file_metadata", lambda key: meta)
     monkeypatch.setattr(
@@ -314,8 +314,8 @@ def test_verify_skips_range_get_for_signatureless_type(monkeypatch):
     monkeypatch.setattr(upload_service, "delete_file", lambda key: None)
     monkeypatch.setattr(upload_service, "invalidate_listing", lambda: None)
 
-    result = verify_upload("uploads/notes.md")
-    assert result.key == "uploads/notes.md"
+    result = verify_upload("volumes/notes.md")
+    assert result.key == "volumes/notes.md"
     assert fetched == []  # no wasted Range-GET
 
 
@@ -327,10 +327,10 @@ async def test_successful_verify_increments_uploads_metric(client, monkeypatch):
     from app.runtime import metrics
 
     monkeypatch.setattr(metrics, "_upload_count", 0)
-    meta = _meta("uploads/a.txt", size_bytes=5, content_type="text/plain")
+    meta = _meta("volumes/a.txt", size_bytes=5, content_type="text/plain")
     _wire_verify(monkeypatch, metadata=meta, head_bytes=b"hello")
 
-    resp = await client.post("/upload/verify", json={"key": "uploads/a.txt"})
+    resp = await client.post("/upload/verify", json={"key": "volumes/a.txt"})
     assert resp.status_code == 200
 
     metrics_resp = await client.get("/metrics")

@@ -4,19 +4,19 @@
 ## Components
 
 - **apps/web/** — Next.js 16 frontend (App Router, Tailwind v4, shadcn/ui)
-  - Dashboard with stats, upload chart, recent uploads
-  - File upload with drag-and-drop, progress tracking
-  - File browser with preview, download, delete
+  - Dashboard: volumes, masks, jobs completed, storage by artifact type
+  - Segmentations (`/jobs`): full lifecycle (create/read/edit/delete/run) + mask-overlay preview
+  - Volumes (`/volumes`): sample-scoped explorer with server-rendered thumbnails
+  - Files (`/files`): the kept full-bucket explorer
   - Dark mode via `next-themes`
 - **services/api/** — FastAPI backend (layered architecture)
-  - REST API for file upload, listing, deletion
-  - B2 S3 integration via boto3
-  - File metadata extraction (images, PDFs)
-  - Health check endpoint with B2 connectivity verification
-  - Structured JSON logging with request tracing
-  - Prometheus-format metrics endpoint
+  - REST API for jobs, volumes, ingest, listing, deletion
+  - **nnU-Net v2 (`nnunetv2`) + torch** segmentation engine — contained in `service/`
+  - B2 S3 integration via boto3 — contained in `repo/`
+  - Server-side mid-slice rendering (nibabel/pydicom/Pillow)
+  - Health check, structured JSON logging, Prometheus metrics
 - **packages/shared/** — TypeScript type definitions
-  - Mirrors Pydantic models from the API
+  - Mirrors Pydantic models (Job, JobStats, VolumeSummary, …)
   - Consumed by `apps/web/` as workspace dependency
 
 ## Backend Layering
@@ -64,6 +64,41 @@ services/api/
 - **No cross-layer mutable state**: Configuration is read-only after init, and no mutable state is shared *between* layers. Intra-layer caches/counters (the listing cache in `repo/list_cache.py`, the B2 connectivity cache in `repo/b2_client.py`, the download counter in `repo/counter.py`, the rate-limit and metrics state in `runtime/`) are module-local and guarded by a `threading.Lock`. The listing cache also owns the only background thread in the app: a stale entry is served immediately while that thread re-scans (stale-while-revalidate), and `main.lifespan` warms it once at startup so no user pays for the cold full-bucket scan.
 - **Validated inputs**: All HTTP inputs validated by FastAPI/Pydantic. File keys reject empty and path-traversal patterns; optional prefix confinement via `ALLOWED_KEY_PREFIX` (off by default).
 
+## nnU-Net segmentation engine
+
+- **Engine containment.** All torch / `nnunetv2` imports live only in
+  `service/segmentation.py`, `service/training.py`, and `service/device.py`, and
+  are done **lazily inside functions** so the FastAPI app and pytest collection
+  load without the ML stack. A structural test
+  (`tests/test_structure.py::test_nnunet_engine_contained_in_service`) enforces
+  that `repo/`, `runtime/`, `types/`, and `config/` never import the engine —
+  the mirror of the boto3-only-in-`repo/` rule.
+- **Real, not mocked.** `segment_volume` runs a genuine `nnUNetPredictor`; there
+  is no thresholding/mock fallback. A missing model fails the run.
+- **The model lives on B2.** The seed runs a real short training run
+  (`service/training.py`, ~1 epoch / ~25 iters) to mint `checkpoint_final.pth`,
+  tars it, and uploads it to `checkpoints/`. At inference,
+  `ensure_model_available()` uses the gitignored `.data/nnUNet_results/` cache or
+  pulls + extracts the tarball from B2. nnU-Net's `nnUNet_raw` /
+  `nnUNet_preprocessed` / `nnUNet_results` env dirs are pointed at `.data/`.
+- **Device auto-detect.** `service/device.py` resolves CUDA → Apple MPS → CPU
+  (default CPU) and downgrades MPS → CPU for nnU-Net (its 3D ops aren't
+  MPS-complete). No GPU is ever required.
+- **torch pin.** torch is pinned `<2.6`: nnU-Net 2.5.x's `PolyLRScheduler` passes
+  the `verbose` positional that torch removed in 2.6, which crashes training.
+
+## Job-as-B2-JSON persistence
+
+- **B2 is the only store — no database.** A Segmentation Job is persisted as a
+  single `jobs/<id>.json` object; `list_objects_v2(prefix="jobs/")` + `get` is
+  the list. Masks/overlays live under `masks/<id>/`; a delete is scoped to those
+  prefixes (never bucket-wide).
+- **Single-writer caveat.** B2 has no conditional PUT / transactions, so two
+  concurrent writers to the same job could clobber each other. This is fine at
+  the single-user demo scale this sample targets — the same class of trade-off
+  as an Iceberg latest-metadata pointer. A multi-writer clone needs an external
+  lock or a real DB.
+
 ## Deployment
 
 - **Local dev** — `pnpm dev` runs both services via `concurrently`
@@ -76,26 +111,26 @@ services/api/
   discovers, so a one-click template deploy inherits the same build, start, and
   health behavior with nothing to configure by hand. The human-approved
   staging/production contract lives in [infra/railway/README.md](infra/railway/README.md).
-- **Vercel** — one project using [Vercel Services](https://vercel.com/docs/services):
-  the `web` (Next.js) and `api` (FastAPI) services build from the same repo and
-  share one origin — the web app at `/`, the API under `/api`. The repo-root
-  `vercel.json` declares both services and routes `/api/*` to the API service;
-  the Vercel-only `services/api/index.py` strips the `/api` prefix so FastAPI
-  keeps its native paths (`/health`, `/files`, …). Uploads go directly from the
-  browser to B2 via a presigned PUT (see
-  [File Upload](docs/features/file-upload.md)), so they bypass the Function's
-  4.5 MB payload ceiling entirely — the bucket must allow the deploy origin in
-  its CORS. A two-separate-Projects alternative and the full delivery contract
-  live in [infra/vercel/README.md](infra/vercel/README.md).
+- **Vercel** — **web tier only.** The FastAPI service imports torch + nnU-Net,
+  which far exceed the serverless Function size/RAM limits, so the API is **not**
+  Vercel-serverless-deployable. Deploy the Next.js web app to Vercel and run the
+  nnU-Net API elsewhere (local, a GPU box, or Railway). Volume ingest still goes
+  directly from the browser to B2 via a presigned PUT (see
+  [Volume Ingest](docs/features/volume-ingest.md)); the bucket must allow the
+  deploy origin in its CORS. The web-tier contract lives in
+  [infra/vercel/README.md](infra/vercel/README.md).
 
 External provisioning and deployment remain explicit user-approved actions.
 
 ## Data Stores
 
-- **Backblaze B2** — object storage (S3-compatible API)
-  - All uploaded files stored in a single bucket
-  - File listing and metadata via S3 `list_objects_v2` / `head_object`
-  - No application database — B2 is the sole data store
+- **Backblaze B2** — object storage (S3-compatible API), the sole data store
+  - `volumes/` raw imaging volumes · `preprocessed/` nnU-Net tensors ·
+    `masks/<job_id>/` masks + overlays · `checkpoints/` the model tarball ·
+    `jobs/<id>.json` the job records · `manifests/cohort.jsonl`
+  - Listing/metadata via S3 `list_objects_v2` / `head_object`; reads/writes via
+    `get_object` / `put_object`; previews via `generate_presigned_url`
+  - **No application database** — job records are JSON objects on B2
 
 ## External Services
 
@@ -111,10 +146,11 @@ See [docs/SECURITY.md](docs/SECURITY.md) for full security documentation.
 
 ## Data Flows
 
-- **Upload**: Browser -> `POST /upload/presign` (API validates the declared file + signs a PUT) -> Browser PUTs bytes **directly to B2** -> `POST /upload/verify` (API HEADs + Range-sniffs the stored object) -> response
-- **List**: Browser -> `GET /files` -> service calls repo -> returns file list
-- **Download**: Browser -> `GET /files/{key}/download` -> service validates key -> repo generates presigned URL -> browser downloads
-- **Delete**: Browser -> `DELETE /files/{key}` -> service validates key -> repo deletes from B2
+- **Ingest**: Browser -> `POST /upload/presign` (validate + sign a PUT under `volumes/`) -> Browser PUTs bytes **directly to B2** -> `POST /upload/verify`
+- **Create job**: Browser -> `POST /jobs` (JSON) -> service validates volume/model -> writes `jobs/<id>.json` (status `pending`)
+- **Run**: Browser -> `POST /jobs/{id}/run` -> service pulls the volume, ensures the model (cache or B2), runs real nnU-Net, writes mask + overlays under `masks/<id>/`, updates the job record (`completed`)
+- **Preview**: `GET /volumes/slice?key=…` streams a rendered mid-slice PNG; `GET /jobs/{id}/slices/{i}` returns a presigned overlay URL
+- **Delete**: Browser -> `DELETE /jobs/{id}` -> deletes `jobs/<id>.json` + `masks/<id>/` (scoped)
 
 ## Observability
 
@@ -137,23 +173,27 @@ silently drift from FastAPI. `GET /metrics` is intentionally server-only.
 
 ## Canonical Files
 
-- Layered API handler: `services/api/app/runtime/upload.py`
-- Service orchestration: `services/api/app/service/upload.py`
-- B2 data access (repo layer): `services/api/app/repo/b2_client.py`
-- Pydantic models: `services/api/app/types/` (`files.py`, `upload.py`, `stats.py`, `formatting.py`)
+- nnU-Net engine: `services/api/app/service/segmentation.py`, `service/training.py`, `service/device.py`, `service/nnunet_env.py`
+- Job CRUD + run: `services/api/app/service/jobs.py`; routes `services/api/app/runtime/jobs.py`
+- Volumes explorer: `services/api/app/service/volumes.py`; routes `services/api/app/runtime/volumes.py`
+- B2 data access (repo layer): `services/api/app/repo/b2_client.py`, `repo/b2_object.py`
+- Pydantic models: `services/api/app/types/` (`jobs.py`, `volumes.py`, `files.py`, …)
 - Config (pydantic-settings): `services/api/app/config/settings.py`
+- Seed: `services/api/scripts/seed_b2.py`
 - Structural tests: `services/api/tests/test_structure.py`
 - OpenAPI contract: `docs/api/openapi.json`
-- OpenAPI exporter: `services/api/scripts/export_openapi.py`
 - Frontend API client: `apps/web/src/lib/api-client.ts`
 - Shared TypeScript types: `packages/shared/src/types.ts`
 
 ## Core Features
 
-- [File Upload](docs/features/file-upload.md)
+- [Segmentation](docs/features/segmentation.md)
+- [Model checkpoints on B2](docs/features/model-checkpoints.md)
+- [Volume ingest](docs/features/volume-ingest.md)
+- [Mask preview](docs/features/mask-preview.md)
+- [Cohort manifest](docs/features/cohort-manifest.md)
 - [File Browser](docs/features/file-browser.md)
 - [Dashboard](docs/features/dashboard.md)
-- [Metadata Extraction](docs/features/metadata-extraction.md)
 
 ## References
 

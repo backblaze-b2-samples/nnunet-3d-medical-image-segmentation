@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FileMetadata } from "@vibe-coding-starter-kit/shared";
+import type { FileMetadata } from "@nnunet-3d-medical-image-segmentation/shared";
 
 import {
   MAX_AUTO_EXPAND_DEPTH,

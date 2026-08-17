@@ -36,4 +36,23 @@ export const ACCEPTED_FILE_TYPES: Record<string, string[]> = {
   ],
   "video/quicktime": [".mov"],
   "video/webm": [".webm"],
+  // 3D imaging volumes for nnU-Net ingest.
+  "application/gzip": [".gz", ".nii.gz"],
+  "application/x-gzip": [".gz", ".nii.gz"],
+  "application/octet-stream": [".nii", ".dcm"],
 };
+
+/**
+ * Resolve the content type to declare in a presign. Browsers frequently report
+ * an empty `File.type` for `.nii.gz` / `.nii` / `.dcm`, which the server's
+ * allow-list would reject — fall back to an extension-derived type so volume
+ * ingest works. The server re-validates.
+ */
+export function resolveUploadContentType(file: File): string {
+  if (file.type) return file.type;
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".nii.gz") || name.endsWith(".gz")) return "application/gzip";
+  if (name.endsWith(".nii") || name.endsWith(".dcm")) return "application/octet-stream";
+  if (name.endsWith(".zip")) return "application/zip";
+  return "application/octet-stream";
+}

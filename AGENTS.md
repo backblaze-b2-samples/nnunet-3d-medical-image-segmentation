@@ -3,6 +3,8 @@
 
 This is the authoritative control surface for all coding agents. Read this first.
 
+**This app:** nnU-Net 3D Medical Image Segmentation — a B2-backed dashboard that ingests 3D CT/MRI volumes, runs **real** `nnunetv2` inference locally, and archives every artifact (volumes, preprocessed tensors, masks, and the trained checkpoint) on Backblaze B2 over the S3-compatible API. The engine (torch/nnunetv2) is contained in `services/api/app/service/`; boto3 stays in `repo/`. See [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Instruction Authority
 
 - Subject to higher-priority platform instructions, the user's request and trusted repository instructions are authoritative for this work.
@@ -27,8 +29,8 @@ When this repo is used as the foundation for a new app, the following pieces are
 **Keep as-is (do not strip, rename, or replace)**
 - **UI kit / design system.** `apps/web/src/components/ui/` (shadcn primitives), the design tokens in `apps/web/src/app/globals.css`, and the `/design` reference page. Build new screens with these primitives; never edit the generated `components/ui/` files directly. Restyling happens through tokens in `globals.css`.
 - **File Explorer.** `/files` route, `apps/web/src/app/files/`, and `apps/web/src/components/files/`. The Files sidebar entry in `apps/web/src/components/layout/app-sidebar.tsx` stays.
-- **Upload.** `/upload` route, `apps/web/src/app/upload/`, and `apps/web/src/components/upload/`. The Upload sidebar entry stays.
-- The sidebar nav itself (Dashboard, Upload, Files, Settings, plus the Design System utility link).
+- **Upload machinery.** The `/upload` route and `apps/web/src/components/upload/` presigned-upload flow — reused here for **volume ingest** (scoped to `volumes/`). Its sidebar entry is folded into Volumes as "Ingest volume"; keep the flow itself.
+- The sidebar nav (Dashboard, Segmentations, Volumes, Files, Settings, plus the Design System utility link). Segmentations (`/jobs`) is the primary entity; Volumes (`/volumes`) is the sample-scoped explorer that sits alongside the kept full-bucket Files explorer.
 
 **Adapt to the new use case**
 - **Dashboard.** `/` route and `apps/web/src/components/dashboard/` (stats cards, upload chart, recent uploads table) are illustrative defaults. Replace them with metrics, charts, and tables that reflect what the new app actually does (e.g. transcripts processed, embeddings indexed, classifications run). New aggregations must flow through the same `runtime -> service -> repo` layering and be exposed via TanStack Query hooks in `apps/web/src/lib/queries.ts` — no bare `useEffect + fetch`.

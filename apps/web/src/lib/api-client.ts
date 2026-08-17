@@ -3,9 +3,14 @@ import type {
   FileMetadata,
   FileMetadataDetail,
   FileUploadResponse,
+  Job,
+  JobStats,
+  JobSummary,
   PresignUploadResponse,
   UploadStats,
-} from "@vibe-coding-starter-kit/shared";
+  VolumeSummary,
+} from "@nnunet-3d-medical-image-segmentation/shared";
+import { resolveUploadContentType } from "@/lib/upload-file-types";
 
 // Single-origin deploys (Vercel `services`: one project serving web + API) put
 // the API under /api on the same origin, so no NEXT_PUBLIC_API_URL is needed —
@@ -17,12 +22,24 @@ export const API_BASE =
   (process.env.NODE_ENV === "production" ? "/api" : "http://localhost:8000");
 
 type ApiClientRoute = {
-  method: "delete" | "get" | "post";
+  method: "delete" | "get" | "patch" | "post";
   path: string;
 };
 
 export const API_CLIENT_ROUTES = {
   health: { method: "get", path: "/health" },
+  // Segmentation Jobs (the primary entity).
+  jobs: { method: "get", path: "/jobs" },
+  createJob: { method: "post", path: "/jobs" },
+  jobStats: { method: "get", path: "/jobs/stats" },
+  job: { method: "get", path: "/jobs/{job_id}" },
+  updateJob: { method: "patch", path: "/jobs/{job_id}" },
+  deleteJob: { method: "delete", path: "/jobs/{job_id}" },
+  runJob: { method: "post", path: "/jobs/{job_id}/run" },
+  jobSlice: { method: "get", path: "/jobs/{job_id}/slices/{index}" },
+  // Sample-scoped Volumes explorer.
+  volumes: { method: "get", path: "/volumes" },
+  volumeSlice: { method: "get", path: "/volumes/slice" },
   files: { method: "get", path: "/files" },
   fileStats: { method: "get", path: "/files/stats" },
   uploadActivity: { method: "get", path: "/files/stats/activity" },
@@ -292,7 +309,7 @@ export async function uploadFile(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         filename: file.name,
-        content_type: file.type,
+        content_type: resolveUploadContentType(file),
         size_bytes: file.size,
       }),
     }
@@ -350,4 +367,84 @@ function putFileToStorage(
     }
     xhr.send(file);
   });
+}
+
+// --- Segmentation Jobs -----------------------------------------------------
+
+function jobPath(template: string, id: string): string {
+  return template.replace("{job_id}", encodeURIComponent(id));
+}
+
+export async function getJobs() {
+  return apiFetch<JobSummary[]>(API_CLIENT_ROUTES.jobs.path);
+}
+
+export async function getJobStats() {
+  return apiFetch<JobStats>(API_CLIENT_ROUTES.jobStats.path);
+}
+
+export async function getJob(id: string) {
+  return apiFetch<Job>(jobPath(API_CLIENT_ROUTES.job.path, id));
+}
+
+export async function createJob(input: {
+  name: string;
+  input_volume_key: string;
+  modality: string;
+  model: string;
+  site_id?: string | null;
+  patient_id?: string | null;
+  notes?: string | null;
+  tags?: string[];
+}) {
+  return apiFetch<Job>(API_CLIENT_ROUTES.createJob.path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateJob(
+  id: string,
+  body: { name?: string; notes?: string | null; tags?: string[] }
+) {
+  return apiFetch<Job>(jobPath(API_CLIENT_ROUTES.updateJob.path, id), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteJob(id: string) {
+  return apiFetch<{ deleted: boolean; id: string }>(
+    jobPath(API_CLIENT_ROUTES.deleteJob.path, id),
+    { method: "DELETE" }
+  );
+}
+
+export async function runJob(id: string) {
+  return apiFetch<Job>(jobPath(API_CLIENT_ROUTES.runJob.path, id), {
+    method: "POST",
+  });
+}
+
+/** Presigned inline URL for one overlay slice PNG of a completed job. */
+export async function getJobSliceUrl(id: string, index: number) {
+  const path = API_CLIENT_ROUTES.jobSlice.path
+    .replace("{job_id}", encodeURIComponent(id))
+    .replace("{index}", String(index));
+  return apiFetch<{ url: string }>(path);
+}
+
+// --- Volumes explorer ------------------------------------------------------
+
+export async function getVolumes() {
+  return apiFetch<VolumeSummary[]>(API_CLIENT_ROUTES.volumes.path);
+}
+
+/** Absolute URL of the server-rendered mid-slice PNG for a volume/mask key. */
+export function volumeSliceUrl(key: string, index?: number): string {
+  const params = new URLSearchParams({ key });
+  if (index !== undefined) params.set("index", String(index));
+  return `${API_BASE}${API_CLIENT_ROUTES.volumeSlice.path}?${params.toString()}`;
 }
