@@ -14,9 +14,21 @@ It runs on local OSS only — **no second API key; your B2 credentials are the o
 
 ## What it looks like
 
-> Screenshots live in `docs/images/` (added by the screenshot step). The money
-> shot is a completed job's **mid-axial-slice PNG with the segmentation mask
-> overlaid** — volumes aren't browser-native, so the server renders the slice.
+**Dashboard** — cohort metrics (volumes, masks, jobs completed, model-on-B2 size), a storage-by-artifact-type breakdown, and recent segmentations.
+
+![Dashboard with cohort metrics, storage-by-artifact breakdown, and recent segmentations](docs/images/dashboard.png)
+
+**Segmentations** — every nnU-Net job across sites and modalities, each linked to its ingested volume, with one-click re-run.
+
+![Segmentations list of CT and MRI jobs with status and re-run actions](docs/images/segmentations.png)
+
+**Volumes** — the sample-scoped explorer of ingested 3D CT/MRI volumes, with server-rendered mid-slice thumbnails and site / modality / patient tags.
+
+![Volumes grid of ingested CT and MRI volumes with mid-slice thumbnails](docs/images/volumes.png)
+
+**Job detail** — a completed job's real NIfTI mask overlaid on the mid-axial slice, with per-label voxel/volume metrics and the mask's B2 key.
+
+![Completed segmentation job showing the lesion mask overlaid on an MRI slice with metrics](docs/images/job-detail.png)
 
 ## The write-amplification story
 
