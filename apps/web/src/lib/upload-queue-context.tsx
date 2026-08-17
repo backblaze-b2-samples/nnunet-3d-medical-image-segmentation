@@ -14,6 +14,7 @@ import type { FileRejection } from "react-dropzone";
 import { uploadFile } from "@/lib/api-client";
 import { useRefresh } from "@/lib/refresh-context";
 import { humanizeBytes } from "@/lib/utils";
+import { MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
 import { interruptedUploadMessage, type UploadItem } from "@/lib/upload-status";
 
 /**
@@ -224,7 +225,7 @@ export function UploadQueueProvider({
     for (const rejection of rejections) {
       const errors = rejection.errors.map((e) => {
         if (e.code === "file-too-large") {
-          return `exceeds 100MB limit (${humanizeBytes(rejection.file.size)})`;
+          return `exceeds ${MAX_UPLOAD_LABEL} limit (${humanizeBytes(rejection.file.size)})`;
         }
         if (e.code === "file-invalid-type") return "file type not supported";
         return e.message;

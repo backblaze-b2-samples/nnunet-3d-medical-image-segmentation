@@ -4,14 +4,13 @@ import { useCallback, useId } from "react";
 import { useDropzone, type FileRejection } from "react-dropzone";
 import { Upload, FileIcon } from "lucide-react";
 import { ACCEPTED_FILE_TYPES } from "@/lib/upload-file-types";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
 
 interface DropzoneProps {
   onFilesSelected: (files: File[]) => void;
   onFilesRejected: (rejections: FileRejection[]) => void;
   disabled?: boolean;
 }
-
-const MAX_SIZE = 100 * 1024 * 1024; // 100MB
 
 export function Dropzone({
   onFilesSelected,
@@ -39,14 +38,14 @@ export function Dropzone({
     onDrop,
     onDropRejected,
     accept: ACCEPTED_FILE_TYPES,
-    maxSize: MAX_SIZE,
+    maxSize: MAX_UPLOAD_BYTES,
     disabled,
     multiple: true,
   });
 
   const active = isDragActive && !disabled;
   let title = "Drag & drop files here, or click to browse";
-  let description = "Max file size: 100 MB per file";
+  let description = `Max file size: ${MAX_UPLOAD_LABEL} per file`;
 
   if (disabled) {
     title = "Uploads in progress";
