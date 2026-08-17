@@ -29,7 +29,7 @@ SimpleITK>=2.3.0,<3.0.0
 scipy>=1.13.0,<2.0.0
 # Many medical-imaging libs still assume numpy<2; nnU-Net + torch resolve
 # cleanly against 1.26.x on the 3.12 baseline.
-numpy>=1.26.0,<2.0.0
+numpy>=2.5.2,<3.0.0
 
 # Dev / quality
 ruff>=0.8.0
