@@ -25,7 +25,7 @@ nnunetv2>=2.5.0,<2.6.0
 torch>=2.4.0,<2.6.0
 nibabel>=5.2.0,<6.0.0
 pydicom>=2.4.0,<4.0.0
-SimpleITK>=2.3.0,<3.0.0
+SimpleITK>=2.5.6,<3.0.0
 scipy>=1.13.0,<2.0.0
 # Many medical-imaging libs still assume numpy<2; nnU-Net + torch resolve
 # cleanly against 1.26.x on the 3.12 baseline.
